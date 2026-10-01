@@ -2,16 +2,7 @@
 
 Bioma de cubos texturizados mediante **ray tracing en CPU, escrito en Rust sin dependencias de Cargo**. Es la evolución del proyecto original `bosque-carbonifero`, basada en los principios del proyecto `esfera`. Abre directamente el diorama, sin planeta, navegador ni servidor.
 
-## Ejecutar en macOS
-
-```sh
-cd /Users/luisestrada/Desktop/proyecto-2
-cargo run --release --offline
-```
-
-Requiere Rust y las herramientas de desarrollo de macOS. La vista incluye controles discretos de zoom y meteorito en la parte inferior. Las fichas aparecen al hacer clic en animales o plantas, y se cierran con C, Esc o la X. La ventana usa FFI directo a AppKit, CoreGraphics, QuartzCore y el runtime Objective-C que proporciona macOS; no se descarga ni enlaza ningún framework de terceros. El audio usa `/usr/bin/afplay`, también del sistema. No usa raylib, SDL, winit, OpenGL, JavaScript ni paquetes externos.
-
-## Explorar
+Video de demostración: https://youtu.be/169CEIAfZgY
 
 - **Arrastrar:** orbitar alrededor del centro de interés.
 - **Rueda, teclas +/− o botones −/+ inferiores:** zoom proporcional a la distancia.
