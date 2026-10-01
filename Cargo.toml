@@ -2,9 +2,18 @@
 name = "bosque-carbonifero"
 version = "0.1.0"
 edition = "2021"
+default-run = "bosque-carbonifero"
 
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
 
+
+[[bin]]
+name = "bosque-carbonifero"
+path = "src/main.rs"
+
+[[bin]]
+name = "carbonifero-original"
+path = "src/carboniferous.rs"
