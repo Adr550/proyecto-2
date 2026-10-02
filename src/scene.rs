@@ -875,6 +875,80 @@ fn survivor_bird(s: &mut Scene, x: f32, z: f32) {
     );
     s.register_animal(start);
 }
+pub fn crater_height(x: f32, z: f32) -> f32 {
+    let p = crate::disaster::IMPACT;
+    let r = (x - p.x).hypot(z - p.z);
+    if r <= 12. {
+        -8. + 10. * (r / 12.).powi(2)
+    } else {
+        ground(x, z) + (1. - ((r - 13.5) / 2.5).abs()).max(0.) * 3.8
+    }
+}
+fn excavate_crater(s: &mut Scene) {
+    let p = crate::disaster::IMPACT;
+    s.cubes.retain(|c| {
+        let center = (c.bounds.lo + c.bounds.hi) * 0.5;
+        (center.x - p.x).hypot(center.z - p.z) > 16.
+    });
+    for x in -16..=16 {
+        for z in -24..=8 {
+            let (xf, zf) = (x as f32, z as f32);
+            let r = (xf - p.x).hypot(zf - p.z);
+            if r > 16. {
+                continue;
+            }
+            let height = (crater_height(xf, zf) * 2.).floor() * 0.5;
+            s.cube(
+                V::new(xf, (height - 11.) * 0.5, zf),
+                V::new(1.001, height + 11., 1.001),
+                if r < 11. {
+                    V::new(0.14, 0.12, 0.11)
+                } else {
+                    V::new(0.30, 0.24, 0.18)
+                },
+                MaterialId::Earth,
+                Tag::None,
+            );
+        }
+    }
+    // Fallen trunks and ejecta around the excavated bowl, using existing materials.
+    for i in 0..34 {
+        let angle = i as f32 * 2.39996;
+        let radius = 17. + (i % 7) as f32 * 1.3;
+        let x = p.x + angle.cos() * radius;
+        let z = p.z + angle.sin() * radius;
+        let base = ground(x, z);
+        s.cube(
+            V::new(x, base + 0.5, z),
+            if i % 3 == 0 {
+                V::new(3.5, 0.7, 0.7)
+            } else {
+                V::new(0.9, 1.0 + (i % 3) as f32 * 0.4, 1.2)
+            },
+            V::new(0.19, 0.15, 0.12),
+            if i % 3 == 0 {
+                MaterialId::Wood
+            } else {
+                MaterialId::Earth
+            },
+            Tag::None,
+        );
+    }
+}
+pub fn impacted(original: &Scene) -> Scene {
+    let mut s = Scene::new(true);
+    s.cubes = original.cubes.clone();
+    s.entities = original.entities.clone();
+    excavate_crater(&mut s);
+    s.finish()
+}
+pub fn ruins(original: &Scene) -> Scene {
+    let mut s = aftermath(original);
+    s.cubes.retain(|c| c.entity == 0);
+    s.entities.clear();
+    s.nodes.clear();
+    s.finish()
+}
 pub fn aftermath(original: &Scene) -> Scene {
     let mut s = Scene::new(true);
     s.cubes = original
@@ -908,7 +982,7 @@ pub fn aftermath(original: &Scene) -> Scene {
         (16., 10.),
         (-29., -16.),
         (30., 23.),
-        (7., -13.),
+        (29., -28.),
     ] {
         mammal(&mut s, x, z);
     }
@@ -918,10 +992,11 @@ pub fn aftermath(original: &Scene) -> Scene {
         (20., 12.),
         (-24., -14.),
         (35., 18.),
-        (9., -14.),
+        (31., -27.),
     ] {
         survivor_bird(&mut s, x, z);
     }
+    excavate_crater(&mut s);
     s.finish()
 }
 pub fn biome() -> Scene {
@@ -1276,6 +1351,60 @@ mod tests {
             10.,
         );
         assert!(visibility > 0.8 && visibility < 1.);
+    }
+    #[test]
+    fn crater_has_depth_and_intermediate_scene_has_no_survivors() {
+        let original = biome();
+        let damaged = impacted(&original);
+        let p = crate::disaster::IMPACT;
+        let hit = damaged
+            .hit(
+                Ray {
+                    o: V::new(p.x, 30., p.z),
+                    d: V::new(0., -1., 0.),
+                },
+                100.,
+            )
+            .unwrap();
+        assert!((30. - hit.t + 8.).abs() < 0.01);
+        assert!(crater_height(13.5, p.z) > ground(13.5, p.z) + 3.);
+        let empty = ruins(&original);
+        assert!(empty.cubes.iter().all(|c| c.entity == 0));
+        let final_scene = aftermath(&original);
+        assert!(final_scene.cubes.iter().any(|c| c.tag == Tag::Mammal));
+        assert!(final_scene.cubes.iter().any(|c| c.tag == Tag::CrownBird));
+    }
+    #[test]
+    fn moving_preview_keeps_cast_shadows() {
+        let mut clear = Scene::new(false);
+        clear.cube(
+            V::new(0., -0.5, 0.),
+            V::new(20., 1., 20.),
+            V::new(0.6, 0.6, 0.6),
+            MaterialId::Earth,
+            Tag::None,
+        );
+        let mut blocked = Scene::new(false);
+        blocked.cubes = clear.cubes.clone();
+        blocked.cube(
+            V::new(0., 1., 0.),
+            V::new(2., 2., 2.),
+            V::new(0.3, 0.3, 0.3),
+            MaterialId::Earth,
+            Tag::None,
+        );
+        let cam = crate::render::Camera {
+            yaw: 0.,
+            pitch: 1.35,
+            distance: 8.,
+            target: V::new(1.5, 0., -1.5),
+        };
+        let a = crate::render::render(&clear.finish(), cam, 1, 1, 0., false);
+        let b = crate::render::render(&blocked.finish(), cam, 1, 1, 0., false);
+        assert!(
+            b[0] as i32 + 15 < a[0] as i32,
+            "moving render lost its shadow: {a:?} {b:?}"
+        );
     }
     #[test]
     fn all_selected_taxa_present() {

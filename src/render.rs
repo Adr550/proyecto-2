@@ -100,6 +100,18 @@ impl Camera {
                 distance: 58.,
                 target: V::new(-29., 1.2, 55.),
             },
+            15 => Self {
+                yaw: 0.45,
+                pitch: 0.72,
+                distance: 52.,
+                target: crate::disaster::IMPACT,
+            },
+            16 => Self {
+                yaw: 0.30,
+                pitch: 0.32,
+                distance: 100.,
+                target: V::new(0., 0., 67.),
+            },
             _ => Self::overview(),
         }
     }
@@ -234,27 +246,72 @@ fn fresnel(f0: f32, cosine: f32) -> f32 {
 fn sky_color(scene: &Scene, ray: Ray, disaster: Disaster) -> V {
     disaster.atmosphere(sky(ray, scene.forest), ray)
 }
-fn ocean_hit(ray: Ray, limit: f32) -> Option<(f32, V)> {
-    if ray.d.y.abs() < 1e-6 {
-        return None;
-    }
-    let t = (0.45 - ray.o.y) / ray.d.y;
-    if t < 0.002 || t >= limit {
-        return None;
-    }
-    let p = ray.o + ray.d * t;
-    if p.x.abs() > 60.5 || p.z < 55. + (p.x * 0.1).sin() * 1.4 || p.z > 94.5 {
-        None
+fn ocean_hit(ray: Ray, limit: f32, disaster: Disaster) -> Option<(f32, V, V)> {
+    if !disaster.tsunami() {
+        if ray.d.y.abs() < 1e-6 {
+            return None;
+        }
+        let t = (0.45 - ray.o.y) / ray.d.y;
+        if t < 0.002 || t >= limit {
+            return None;
+        }
+        let p = ray.o + ray.d * t;
+        if p.x.abs() > 60.5 || p.z < 55. + (p.x * 0.1).sin() * 1.4 || p.z > 94.5 {
+            None
+        } else {
+            Some((t, p, V::new(0., 1., 0.)))
+        }
     } else {
-        Some((t, p))
+        // Intersect the moving height field inside a tight volume, then refine the crossing.
+        let volume = Bounds {
+            lo: V::new(-60.5, 0.44, 43.),
+            hi: V::new(60.5, 11., 94.5),
+        };
+        let (near, far, _, _) = volume.interval(ray, limit)?;
+        let start = near.max(0.008);
+        let end = far.min(limit);
+        if end <= start {
+            return None;
+        }
+        let steps = ((end - start) / 0.8).ceil().clamp(1., 220.) as usize;
+        let delta = (end - start) / steps as f32;
+        let value = |t: f32| {
+            let p = ray.o + ray.d * t;
+            p.y - disaster.water_height(p.x, p.z)
+        };
+        let mut previous_t = start;
+        let mut previous = value(start);
+        for i in 1..=steps {
+            let t = start + delta * i as f32;
+            let current = value(t);
+            if (current >= 0.) != (previous >= 0.) {
+                let (mut lo, mut hi) = (previous_t, t);
+                for _ in 0..10 {
+                    let mid = (lo + hi) * 0.5;
+                    if (value(mid) >= 0.) == (previous >= 0.) {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
+                }
+                let t = (lo + hi) * 0.5;
+                let p = ray.o + ray.d * t;
+                if p.z >= 55. + (p.x * 0.1).sin() * 1.4 || disaster.water_height(p.x, p.z) > 0.5 {
+                    return Some((t, p, disaster.water_normal(p)));
+                }
+            }
+            previous_t = t;
+            previous = current;
+        }
+        None
     }
 }
 // Selection follows the same refracted path through the ocean as the displayed image.
-pub fn pick(scene: &Scene, mut ray: Ray) -> Option<Hit> {
+pub fn pick(scene: &Scene, mut ray: Ray, disaster: Disaster) -> Option<Hit> {
     let hit = scene.hit(ray, 500.);
-    if let Some((_, p)) = ocean_hit(ray, hit.map_or(500., |h| h.t)) {
-        let entering = ray.d.y < 0.;
-        let n = V::new(0., if entering { 1. } else { -1. }, 0.);
+    if let Some((_, p, outward)) = ocean_hit(ray, hit.map_or(500., |h| h.t), disaster) {
+        let entering = ray.d.dot(outward) < 0.;
+        let n = if entering { outward } else { -outward };
         let ior = MaterialId::Water.get().ior;
         ray = Ray {
             o: p,
@@ -414,17 +471,17 @@ fn trace_color(
 ) -> V {
     let hit = scene.hit(ray, 500.);
     let distance = hit.map_or(500., |h| h.t);
-    let ocean = ocean_hit(ray, distance);
+    let ocean = ocean_hit(ray, distance, disaster);
     if let Some(meteor) = disaster.meteor(ray, ocean.map_or(distance, |h| h.0)) {
         return meteor;
     }
-    if let Some((_, p)) = ocean {
+    if let Some((_, p, normal)) = ocean {
         let local = MaterialId::Water.get().sample(p, time);
-        return optical(
+        let water = optical(
             scene,
             ray,
             p,
-            V::new(0., 1., 0.),
+            normal,
             MaterialId::Water,
             local,
             time,
@@ -432,6 +489,12 @@ fn trace_color(
             disaster,
             depth,
         );
+        let foam = if disaster.tsunami() {
+            ((p.y - 1.5) / 6.).clamp(0., 0.88) * (0.7 + noise(p * 2.) * 0.3)
+        } else {
+            0.
+        };
+        return water.mix(V::new(0.92, 0.95, 0.93), foam);
     }
     if let Some(hit) = hit {
         let local = shade(scene, ray, hit, time, shadows, disaster);
@@ -456,8 +519,15 @@ fn trace_color(
         sky_color(scene, ray, disaster)
     }
 }
-pub fn render(scene: &Scene, cam: Camera, w: usize, h: usize, time: f32, shadows: bool) -> Vec<u8> {
-    render_cancellable(scene, cam, w, h, time, shadows, None).unwrap()
+pub fn render(
+    scene: &Scene,
+    cam: Camera,
+    w: usize,
+    h: usize,
+    time: f32,
+    full_quality: bool,
+) -> Vec<u8> {
+    render_cancellable(scene, cam, w, h, time, full_quality, None).unwrap()
 }
 
 pub fn render_cancellable(
@@ -466,10 +536,19 @@ pub fn render_cancellable(
     w: usize,
     h: usize,
     time: f32,
-    shadows: bool,
+    full_quality: bool,
     cancel: Option<(&std::sync::atomic::AtomicU64, u64)>,
 ) -> Option<Vec<u8>> {
-    render_effects(scene, cam, w, h, time, shadows, cancel, Disaster::default())
+    render_effects(
+        scene,
+        cam,
+        w,
+        h,
+        time,
+        full_quality,
+        cancel,
+        Disaster::default(),
+    )
 }
 pub fn render_effects(
     scene: &Scene,
@@ -477,7 +556,7 @@ pub fn render_effects(
     w: usize,
     h: usize,
     time: f32,
-    shadows: bool,
+    full_quality: bool,
     cancel: Option<(&std::sync::atomic::AtomicU64, u64)>,
     disaster: Disaster,
 ) -> Option<Vec<u8>> {
@@ -501,7 +580,7 @@ pub fn render_effects(
                     }
                     let x = i % w;
                     let y = y0 + i / w;
-                    let samples = if shadows { 2 } else { 1 };
+                    let samples = if full_quality { 2 } else { 1 };
                     let mut c = V::default();
                     for sample in 0..samples {
                         let (dx, dy) = if samples == 1 {
@@ -516,9 +595,9 @@ pub fn render_effects(
                             scene,
                             ray,
                             time,
-                            shadows,
+                            true, // Keep shadow rays enabled in moving previews too.
                             disaster,
-                            if shadows { 4 } else { 2 },
+                            if full_quality { 4 } else { 2 },
                         );
                         c = c + base.mix(V::new(1., 0.92, 0.72), disaster.flash());
                     }
@@ -594,7 +673,7 @@ mod texture_tests {
     fn ocean_picking_matches_refracted_ray_and_reflection_hits_geometry() {
         let scene = crate::scene::biome();
         let ray = Camera::preset(10).ray(550., 378., 1100, 756);
-        let (_, p) = ocean_hit(ray, 500.).unwrap();
+        let (_, p, _) = ocean_hit(ray, 500., Disaster::default()).unwrap();
         let d = refract(ray.d, V::new(0., 1., 0.), 1. / MaterialId::Water.get().ior).unwrap();
         let expected = scene
             .hit(
@@ -605,7 +684,10 @@ mod texture_tests {
                 500.,
             )
             .unwrap();
-        assert_eq!(pick(&scene, ray).unwrap().index, expected.index);
+        assert_eq!(
+            pick(&scene, ray, Disaster::default()).unwrap().index,
+            expected.index
+        );
         // The reflected path can hit the coast rather than only return a sky color.
         let p = V::new(-32., 0.45, 65.);
         let incident = V::new(0., -0.15, -1.).norm();
@@ -619,6 +701,19 @@ mod texture_tests {
                 100.
             )
             .is_some());
+    }
+    #[test]
+    fn tsunami_surface_is_raised_geometry() {
+        let disaster = Disaster::at(12.);
+        let ray = Ray {
+            o: V::new(0., 20., 82.2),
+            d: V::new(0., -1., 0.),
+        };
+        let (_, p, n) = ocean_hit(ray, 100., disaster).unwrap();
+        assert!(p.y > 7.);
+        assert!((p.y - disaster.water_height(p.x, p.z)).abs() < 0.005);
+        assert!((n.length() - 1.).abs() < 0.001);
+        assert!((ocean_hit(ray, 100., Disaster::default()).unwrap().1.y - 0.45).abs() < 0.001);
     }
     #[test]
     fn orbit_preserves_target_and_distance() {

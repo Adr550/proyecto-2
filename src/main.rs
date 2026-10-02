@@ -85,7 +85,7 @@ impl Drop for Audio {
 fn main() -> std::io::Result<()> {
     let args: Vec<_> = std::env::args().collect();
     if args.iter().any(|s| s == "--help") {
-        println!("Diorama - Rust / ray tracing CPU\n--render salida.ppm [--view 1..14] [--info] : imagen sin ventana\n--frames N : comprobacion de ventana\n1: paisaje. 2: Triceratops. 3: T. rex. 4: Edmontosaurus.\n5: Ankylosaurus. 6: ave. 7: anfibio. 8: montanas. 9: costa. 0: pozas costeras.\nVistas --view 10: mosasaurio, 11: plesiosaurio, 12: pozas, 13: minerales. G: minerales. V: reflejos del oceano.\nArrastrar: girar. Rueda +/-: zoom. WASD: rotar. M: sonido. C: cerrar ficha. R: inicio. Esc: salir.\nClic sobre un animal: zoom e informacion. X: volver. Boton meteorito: impacto/reiniciar. --impact SEG: estado de la secuencia en --render.");
+        println!("Diorama - Rust / ray tracing CPU\n--render salida.ppm [--view 1..16] [--info] : imagen sin ventana\n--frames N : comprobacion de ventana\n1: paisaje. 2: Triceratops. 3: T. rex. 4: Edmontosaurus.\n5: Ankylosaurus. 6: ave. 7: anfibio. 8: montanas. 9: Golfo de Mexico. 0: pozas costeras.\nVistas --view 10: mosasaurio, 11: plesiosaurio, 12: pozas, 13: minerales. G: minerales. V: reflejos del oceano. B: crater. T: tsunamis. --view 15: crater, 16: tsunamis.\nArrastrar: girar. Rueda +/-: zoom. WASD: rotar. M: sonido. C: cerrar ficha. R: inicio. Esc: salir.\nClic sobre un animal: zoom e informacion. X: volver. Boton meteorito: impacto/reiniciar. --impact SEG: estado de la secuencia en --render.");
         return Ok(());
     }
     let view = args
@@ -94,7 +94,7 @@ fn main() -> std::io::Result<()> {
         .and_then(|i| args.get(i + 1))
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(1)
-        .clamp(1, 14);
+        .clamp(1, 16);
     if args.iter().any(|s| s == "--benchmark") {
         let scene = scene::biome();
         for view in [1, 3, 7] {
@@ -132,10 +132,11 @@ fn main() -> std::io::Result<()> {
             .and_then(|s| s.parse::<f32>().ok())
             .map(disaster::Disaster::at)
             .unwrap_or_default();
-        let scene = if disaster.aftermath() {
-            scene::aftermath(&original)
-        } else {
-            original
+        let scene = match disaster.stage() {
+            0 => original,
+            1 => scene::impacted(&original),
+            2 => scene::ruins(&original),
+            _ => scene::aftermath(&original),
         };
         let now = Instant::now();
         let (w, h) = (1600, 1100);
@@ -234,9 +235,14 @@ fn run(max_frames: Option<u64>, initial_view: usize) -> std::io::Result<()> {
     use std::sync::Arc;
     use std::time::Duration;
     let scene = Arc::new(scene::biome());
-    let aftermath = Arc::new(scene::aftermath(&scene));
+    let scenes = [
+        scene.clone(),
+        Arc::new(scene::impacted(&scene)),
+        Arc::new(scene::ruins(&scene)),
+        Arc::new(scene::aftermath(&scene)),
+    ];
     let window = native::Window::new(W, H);
-    let mut renderer = worker::Renderer::new(scene.clone(), aftermath.clone(), W, H);
+    let mut renderer = worker::Renderer::new(scenes.clone(), W, H);
     let mut audio = Audio::new();
     let mut view = initial_view;
     let mut cam = Camera::preset(view);
@@ -352,14 +358,11 @@ fn run(max_frames: Option<u64>, initial_view: usize) -> std::io::Result<()> {
                                     transition = Some((cam, previous, now));
                                 }
                             } else if !ui::card_contains(p.x, p.y, W, &info) {
-                                let visible_scene = if displayed_disaster.aftermath() {
-                                    &aftermath
-                                } else {
-                                    &scene
-                                };
+                                let visible_scene = &scenes[displayed_disaster.stage()];
                                 let hit = render::pick(
                                     visible_scene,
                                     displayed_cam.ray(p.x as f32, p.y as f32, W, H),
+                                    displayed_disaster,
                                 );
                                 info = hit
                                     .map(|h| describe(visible_scene.cubes[h.index].tag))
@@ -456,6 +459,14 @@ fn run(max_frames: Option<u64>, initial_view: usize) -> std::io::Result<()> {
                             info.clear();
                             changed = true;
                         }
+                        11 | 17 => {
+                            view = if key == 11 { 15 } else { 16 };
+                            return_camera = None;
+                            transition = None;
+                            cam = Camera::preset(view);
+                            info.clear();
+                            changed = true;
+                        }
                         0 | 123 => {
                             cam.orbit(-0.025, 0.);
                             changed = true;
@@ -531,7 +542,7 @@ fn run(max_frames: Option<u64>, initial_view: usize) -> std::io::Result<()> {
             }
             // Never display a pre-impact frame after a reset, or extinct fauna after the scene swap.
             if (frame.disaster.elapsed.is_some() == disaster.elapsed.is_some())
-                && frame.disaster.aftermath() == disaster.aftermath()
+                && frame.disaster.stage() == disaster.stage()
                 && (!frame.full || frame.generation == revision)
             {
                 if let Some(pixels) = frame.pixels {

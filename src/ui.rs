@@ -5,6 +5,7 @@ fn glyph(c: char) -> [u8; 7] {
         'B' => [30, 17, 17, 30, 17, 17, 30],
         'C' => [14, 17, 16, 16, 16, 17, 14],
         'D' => [30, 17, 17, 17, 17, 17, 30],
+        'É' => [2, 4, 31, 16, 30, 16, 31],
         'E' => [31, 16, 16, 30, 16, 16, 31],
         'F' => [31, 16, 16, 30, 16, 16, 16],
         'G' => [14, 17, 16, 23, 17, 17, 15],
@@ -160,7 +161,7 @@ pub fn action_at(
         Some(Action::ZoomIn)
     } else if x >= w as f64 - 280. && x <= w as f64 - 18. {
         Some(Action::Meteor)
-    } else if (446.0..614.0).contains(&x) {
+    } else if (446.0..696.0).contains(&x) {
         Some(Action::Coast)
     } else if disaster.aftermath() && (138.0..430.0).contains(&x) {
         Some(Action::Survivors)
@@ -198,8 +199,8 @@ pub fn controls(
         rect(p, w, 138, y, 292, 48, [51, 59, 56]);
         text(p, w, 152, y + 17, "VER SUPERVIVIENTES", 2, [241, 237, 220]);
     }
-    rect(p, w, 446, y, 168, 48, [30, 72, 84]);
-    text(p, w, 462, y + 17, "COSTA [9]", 2, [235, 244, 240]);
+    rect(p, w, 446, y, 250, 48, [30, 72, 84]);
+    text(p, w, 462, y + 17, "GOLFO DE MÉXICO", 2, [235, 244, 240]);
     if focused {
         text(p, w, 20, 22, "X: VOLVER", 2, [245, 242, 222]);
     }

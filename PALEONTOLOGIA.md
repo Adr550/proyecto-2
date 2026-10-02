@@ -46,7 +46,7 @@ Las elevaciones montañosas son una ampliación artística del diorama solicitad
 
 ## Secuencia del impacto y supervivientes
 
-La secuencia visual de 18 segundos comprime el impacto, incendios y un paisaje posterior. No representa la escala real, duración, distribución exacta de incendios ni la supervivencia de animales en el punto de impacto. Se retiran los dinosaurios no avianos y las enantiornitas. La escena posterior incluye reconstrucciones genéricas de multituberculados y aves modernas basales, sin identificación a nivel de especie.
+La secuencia visual de 30 segundos comprime el impacto, incendios y un paisaje posterior. No representa la escala real, duración, distribución exacta de incendios ni la supervivencia de animales en el punto de impacto. Se retiran los dinosaurios no avianos y las enantiornitas. La escena posterior incluye reconstrucciones genéricas de multituberculados y aves modernas basales, sin identificación a nivel de especie.
 
 - Field et al. (2018), *Early Evolution of Modern Birds Structured by Global Forest Collapse at the End-Cretaceous Mass Extinction*: relación entre colapso forestal y ancestros no arborícolas de aves supervivientes. [Artículo](https://www.sciencedirect.com/science/article/pii/S0960982218305347).
 - Smithsonian, *About Mammals (Class Mammalia): Paleobiology*: supervivencia de linajes de mamíferos y diversificación posterior. [Fuente](https://qrius.si.edu/taxonomy/term/11996?page=1).
@@ -64,3 +64,5 @@ La costa es una composición artística, no la localización exacta del bosque c
 - **Xiphosura:** quelicerados; sus linajes atravesaron el K–Pg. No se usa una especie actual de *Limulus*. [Smithsonian: Horseshoe crab facts](https://nationalzoo.si.edu/animals/news/10-incredible-horseshoe-crab-facts).
 - **Nautiloideos:** sobreviven linajes de cefalópodos de concha enrollada, a diferencia de las ammonitas. [AMNH: Survival in the Seas](https://www.amnh.org/exhibitions/dinosaurs-ancient-fossils/extinction/survival-in-the-seas).
 - **Bivalvia:** muchos linajes persisten, con una gran reorganización ecológica; no todos sobreviven. Los modelos no representan rudistas. [NHM: bivalves after the extinction](https://wifi.nhm.ac.uk/discover/news/2025/may/how-dinosaur-killing-extinction-could-help-save-modern-bivalves.html).
+
+El rótulo «Golfo de México» identifica el sector marino del diorama a petición del usuario. El cráter, el tamaño de las olas y la proximidad del bosque son composiciones artísticas; no constituyen un mapa ni una reproducción a escala del cráter de Chicxulub.

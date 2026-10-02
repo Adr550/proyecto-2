@@ -33,7 +33,7 @@ La documentación y el grado de certeza están en [PALEONTOLOGIA.md](PALEONTOLOG
 - Cubos para terreno y modelos de animales voxelizados; algunas piezas de agua, capas y follaje son cuboides.
 - BVH construida en Rust: inversas precalculadas por rayo, distancias de entrada almacenadas y salida temprana para sombras.
 - Luz difusa, brillo especular en agua, reflexión del cielo y geometría mediante rayos secundarios, refracción por Snell, Fresnel y reflexión interna total, sombras por rayos, niebla y cinco materiales procedurales compartidos por todo el bioma.
-- Render en segundo plano con `std::thread`, sin bloquear los eventos de la ventana. Vista previa bilineal de resolución adaptativa al arrastrar, usar WASD o hacer zoom; calidad completa con dos muestras tras 180 ms de reposo. Los renders finales obsoletos se cancelan. Abrir/cerrar una ficha reutiliza la imagen ya calculada. No se recalcula la escena en reposo.
+- Render en segundo plano con `std::thread`, sin bloquear los eventos de la ventana. Vista previa bilineal de resolución adaptativa al arrastrar, usar WASD o hacer zoom; calidad completa con dos muestras tras 180 ms de reposo. Las sombras se mantienen activas también durante el movimiento y las animaciones; solo varían la resolución, el antialiasing y el límite de rebotes. Los renders finales obsoletos se cancelan. Abrir/cerrar una ficha reutiliza la imagen ya calculada. No se recalcula la escena en reposo.
 - Fuente bitmap propia; no requiere fuentes ni texturas descargadas. Los materiales usan ruido interpolado continuo, con filtrado bilineal de la vista previa y presentación lineal.
 - Ventana de 1100 × 756, render final de 1100 × 756; la resolución durante el movimiento se adapta a la CPU. La velocidad depende de CPU; no es un motor GPU ni un path tracer físicamente completo.
 
@@ -57,7 +57,7 @@ cargo run --release --offline --bin carbonifero-original
 
 ## Meteorito
 
-El botón **Lanzar meteorito** lleva la cámara a la vista general e inicia una secuencia artística de 18 segundos: descenso (0–3 s), destello y onda expansiva (3–6 s), bosque incendiado, carbonización y ceniza. Al terminar quedan troncos sin follaje, una paleta gris y pequeños mamíferos y aves en el suelo. **Ver supervivientes** acerca la cámara a un grupo; **Reiniciar bioma** o R restaura el bosque. El ambiente sonoro del bosque se pausa al lanzar el meteorito.
+El botón **Lanzar meteorito** lleva la cámara a la vista general e inicia una secuencia artística de 30 segundos: descenso (0–3 s), excavación del cráter, destello y onda expansiva (3–6 s), incendio, tren de tsunamis (8–26 s) y ceniza. Los supervivientes se muestran únicamente al finalizar (30 s). Al terminar quedan troncos sin follaje, una paleta gris y pequeños mamíferos y aves en el suelo. **Ver supervivientes** acerca la cámara a un grupo; **Reiniciar bioma** o R restaura el bosque. El ambiente sonoro del bosque se pausa al lanzar el meteorito.
 
 Las aves finales representan linajes de aves modernas; no son las enantiornitas anteriores. Los mamíferos son multituberculados indeterminados. No se atribuye supervivencia a especies concretas, ni a animales situados en el punto del impacto. La escena final representa un momento posterior y comprime procesos de distintas duraciones. Las llamas y la onda son efectos visuales, no una simulación física de Chicxulub.
 
@@ -65,13 +65,13 @@ Las animaciones usan el render de vista previa en segundo plano y recuperan la c
 
 ```sh
 cargo run --release --offline -- --render impacto.ppm --impact 8
-cargo run --release --offline -- --render ceniza.ppm --impact 18
-cargo run --release --offline -- --render supervivientes.ppm --impact 18 --survivors
+cargo run --release --offline -- --render ceniza.ppm --impact 30
+cargo run --release --offline -- --render supervivientes.ppm --impact 30 --survivors
 ```
 
 ## Costa y fauna marina
 
-El botón **Costa [9]** y la tecla **9** muestran la playa y el mar; **0** acerca las pozas con cangrejos herradura y moluscos. El agua refracta la imagen y el rayo de selección de los animales sumergidos, manteniendo el zoom y la ficha; **X** regresa a la vista anterior.
+El botón **Golfo de México** y la tecla **9** muestran la playa y el mar; **0** acerca las pozas con cangrejos herradura y moluscos. El agua refracta la imagen y el rayo de selección de los animales sumergidos, manteniendo el zoom y la ficha; **X** regresa a la vista anterior.
 
 - Mosasaurio indeterminado: la ficha indica **reptil marino, no dinosaurio**.
 - Plesiosaurio elasmosáurido indeterminado, de cuello largo y cuatro aletas, representativo del Cretácico final.
@@ -86,7 +86,7 @@ La costa es una extensión artística contemporánea del diorama y no una recons
 cargo run --release --offline -- --render costa.ppm --view 9
 cargo run --release --offline -- --render mosasaurio.ppm --view 10 --info
 cargo run --release --offline -- --render plesiosaurio.ppm --view 11
-cargo run --release --offline -- --render costa-posterior.ppm --view 9 --impact 18
+cargo run --release --offline -- --render costa-posterior.ppm --view 9 --impact 30
 ```
 
 ## Cinco materiales y óptica
@@ -110,4 +110,17 @@ La textura modula el albedo. `specular` y `shininess` controlan el brillo; `tran
 ```sh
 cargo run --release --offline -- --render minerales.ppm --view 13 --info
 cargo run --release --offline -- --render reflejos.ppm --view 14
+```
+
+## Cráter, tsunamis y ondas de choque
+
+**B** acerca la cámara al cráter; **T** muestra el mar para observar los tsunamis. Estas teclas cambian la vista: la secuencia se inicia con el botón del meteorito. El cráter aparece desde el impacto y permanece al terminar: tiene una cuenca de 24 unidades de diámetro y 8 de profundidad bajo el nivel cero, borde elevado, rocas expulsadas y troncos caídos. Se reutilizan los cinco materiales existentes.
+
+Los tsunamis son tres crestas de una superficie de altura animada que avanzan hacia la costa, con espuma, reflexión y refracción. Los rayos intersectan esta superficie mediante muestreo acotado y refinamiento; no son una imagen superpuesta. El agua vuelve a su nivel al acabar. La fase intermedia arrasada no muestra fauna; los representantes supervivientes terrestres y marinos aparecen al final.
+
+La onda de choque luminosa usa `r = 28 * (t - 3)` y `intensidad = max(0, 1 - abs(distancia - r) / 3)`: un anillo naranja que se expande sobre las superficies. El fuego utiliza ruido tridimensional con su coordenada vertical desplazada por el tiempo; ese patrón modula la emisión naranja/amarilla. Ninguno añade otro material. Son efectos artísticos calculados en Rust, no una simulación de fluidos, combustión o propagación física del impacto.
+
+```sh
+cargo run --release --offline -- --render crater.ppm --view 15 --impact 30
+cargo run --release --offline -- --render tsunami.ppm --view 16 --impact 14
 ```

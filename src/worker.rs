@@ -33,7 +33,7 @@ pub struct Renderer {
     pub busy: bool,
 }
 impl Renderer {
-    pub fn new(scene: Arc<Scene>, aftermath: Arc<Scene>, width: usize, height: usize) -> Self {
+    pub fn new(scenes: [Arc<Scene>; 4], width: usize, height: usize) -> Self {
         let (tx, requests) = mpsc::channel::<Request>();
         let (results, rx) = mpsc::channel();
         let generation = Arc::new(AtomicU64::new(0));
@@ -44,11 +44,7 @@ impl Renderer {
                 let divisor = if request.full { 1 } else { request.divisor };
                 let (w, h) = (width / divisor, height / divisor);
                 let pixels = render::render_effects(
-                    if request.disaster.aftermath() {
-                        &aftermath
-                    } else {
-                        &scene
-                    },
+                    &scenes[request.disaster.stage()],
                     request.camera,
                     w,
                     h,
